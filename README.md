@@ -9,5 +9,4 @@ I'm still working on updating this to work well. This is a learning project more
 That has been a fun project, but it has taken me awhile to wrap my head around how tables are supposed to interact with eachother and normalize them appropriately. It still has a long way to go, and
 I'm not exactly sure if the adding of columns to a table on the fly will be best practice in the future. 
 
-This is also a huge upgrade from the previous project in that it uses the public api instead of relying on scraping tables off the web. The sleeperreqs.py is a library can call any of the Sleeper APIs.
-
+This is also a huge upgrade from the previous project in that it uses the public api instead of relying on scraping tables off the web. 
