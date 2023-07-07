@@ -1,5 +1,5 @@
 # sleeperSpider
-Get Sleeper info using their public API
+get sleeper info using their public API
 
 This is my new (slightly better) attempt to collect NFL Player Info and then sort them into a ranking list. This is an upgrade from the idea started in the "fantasy2020" Repo.
 
