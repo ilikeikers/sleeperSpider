@@ -1,349 +1,180 @@
-import sleeperreqs as reqs
+import helpers as api
 import json
-import sqlite3
-#import traceback
 
-# Test Variables
 
-username = 'ilikeikers'
-userid = '571487366985555968'
-league = '786647570763137024' # 2022 Superflex Dynasty
-league2 = '784553434551558144' # 2022 10 Man (Rocky Mountain High)
-league3 = '864592401434628096' # 2022 10 Man Superflex Redraft League
-draft = '786647570763137025' # 2022 Superflex Dynasty Draft
-trend = 'add' # could also be 'drop'
-#trend = 'drop' # could also be 'add'
-season = 2022 # 2020-2023 is range for this user
-week = 2
-dbfile = 'test.db'
-table = 'personalUserInfo'
-
-# Creates the strings needed for queries from the dictionary. Also returns a list of the columns to cycle through in other functions.
-def getDictStrings(data_dict):
-    keys_string = ""
-    vals_string = ""
-    keys_list = []
-    count = 0
-    for key in data_dict.keys():
-        # Don't want the ',' in the first one. There has to be a better way though.
-        if count == 0:
-            keys_add = str(key)
-            vals_add = ":" + str(key)
-        else:
-            keys_add = ", " + str(key)
-            vals_add = ", :" + str(key)
-        keys_list.append(key)
-        keys_string = keys_string + keys_add
-        vals_string = vals_string + vals_add
-        count += 1
-
-    return keys_string, vals_string, keys_list
-
-# Checks if there are any dict or lists for the values. Returns list of them or
-def checkForDicts(data_dict):
-    # Runs through the dictionary to see if any of the values contain a dictionary or a list. returnbit returns 'True' if so.
-    temp_bit = False
-    return_bit = True
-    dict_list = []
-    list_list = []
-    good_list = []
-    for key in data_dict.keys():
-        if type(data_dict.get(key)) == dict:
-            temp_bit = False
-            dict_list.append(key)
-        if type(data_dict.get(key)) == list:
-            temp_bit = False
-            list_list.append(key)
-        else:
-            temp_bit = True
-            good_list.append(key)
-        return_bit = return_bit and temp_bit
-
-    return return_bit, dict_list, list_list, good_list
-
-# Drop a given table
-def tableDrop(table_title, db_file):
-    conn = sqlite3.connect(db_file)
-    cur = conn.cursor()
-    query_table_title = '[' + str(table_title) + ']'
-    query = "DROP TABLE IF EXISTS {0}".format(query_table_title)
-    cur.execute(query)
-    conn.commit()
-    cur.close()
-    conn.close()
-
-    return
-
-# Create a given table. Will overwrite if table already exists.
-def tableCreate(table_title, db_file, data_dict):
-    # Drops the table first if it exists.
-    tableDrop(table_title, db_file)
-    conn = sqlite3.connect(db_file)
-    cur = conn.cursor()
-    # Data comes in as a dict. This function returns a string of the dict keys to use for the query.
-    columns, *_ = getDictStrings(data_dict)
-    query_table_title = '[' + str(table_title) + ']'
-    query = "CREATE TABLE {0} ({1})".format(query_table_title, columns)
-    cur.execute(query)
-    conn.commit()
-    cur.close()
-    conn.close()
-
-    return
-
-# Insert data into a given table. Returns the rowid of the insert for use as key if called by a different table
-def tableInsert(table_title, db_file, data_dict):
-    conn = sqlite3.connect(db_file)
-    cur = conn.cursor()
-    column_headers, cell_data, _ = getDictStrings(data_dict)
-    query_table_title = '[' + str(table_title) + ']'
-    create_query = "CREATE TABLE IF NOT EXISTS {0} ({1})".format(query_table_title, column_headers)
-    insert_query = "INSERT INTO {0} ({1}) VALUES ({2})".format(query_table_title, column_headers, cell_data)
-    cur.execute(create_query)
-    cur.execute(insert_query, data_dict)
-    row_id = cur.lastrowid
-    conn.commit()
-    cur.close()
-    conn.close()
-
-    return row_id
-
-# Adds columns to a given table.
-def addColumns(table_title, db_file, data_dict):
-    conn = sqlite3.connect(db_file)
-    cur = conn.cursor()
-    column_headers, _ , columns_list = getDictStrings(data_dict)
-    query_table_title = '[' + str(table_title) + ']'
-    create_query = "CREATE TABLE IF NOT EXISTS {0} ({1})".format(query_table_title, column_headers)
-    cur.execute(create_query)
-    conn.commit()
-    for column in columns_list:
-        try:
-            alter_query = "ALTER TABLE {0} ADD COLUMN {1} text".format(query_table_title, str(column))
-            cur.execute(alter_query)
-            conn.commit()
-        except:
-            pass
-    cur.close()
-    conn.close()
-
-    return
-
-# Adds a dictionary to a table.
-def addRow(table_title, db_file, data_dict):
-    addColumns(table_title, db_file, data_dict)
-    row_id = tableInsert(table_title, db_file, data_dict)
-
-    return row_id
-
-# Builds the a dictionary given a list. Can assign a prefix for the column name and a count setpoint. Returns the new dictionary
-def buildListDict(data_list, column_title="pos", count=1):
-    new_dict = {}
-    for data in data_list:
-        key = column_title + str(count)
-        value = str(data)
-        new_dict[key] = value
-        count += 1
-
-    return new_dict
-
-# Create Embededed List Table
-def createEmbedListTable(initial_table_dict, initial_table_title, db_file, lists_list, dict_linkkey):
-    for list_title in lists_list:
-        new_table_title = str(list_title)
-        data_list = initial_table_dict.get(list_title)
-        new_dict = buildListDict(data_list)
-        addEmbedItem(initial_table_dict, initial_table_title, db_file, new_dict, new_table_title, dict_linkkey, new_table_title)
-
-    return
-
-# Create Embededed List Table
-def createEmbedDictTable(initial_table_dict, initial_table_title, db_file, dicts_list, dict_linkkey):
-    for dict_title in dicts_list:
-        new_table_title = str(dict_title)
-        #new_table_title = str(initial_table_title) + '_' + str(dict_title)
-        new_dict = initial_table_dict.get(str(dict_title))
-        addEmbedItem(initial_table_dict, initial_table_title, db_file, new_dict, new_table_title, dict_linkkey, dict_title)
-
-    return
-
-# Adds a dictionary to a table. Replaces the key value pair in the initial dictionary with the new row id
-def addEmbedRow(initial_table_dict, initial_table_title, db_file, data_dict, new_table_title, dict_linkkey, dict_title):
-    data_dict[dict_linkkey] = initial_table_title
-    row_id = addRow(new_table_title, db_file, data_dict)
-    del initial_table_dict[dict_title]
-    initial_table_dict[dict_title] = row_id
-
-    return initial_table_dict
-
-# Check and add embedded item
-def addEmbedItem(initial_table_dict, initial_table_title, db_file, data_dict, new_table_title, dict_linkkey, dict_title=''):
-    updated_dict = {}
-    test_bit, dicts_list, lists_list, _ = checkForDicts(data_dict)
-    if dicts_list:
-        createEmbedDictTable(initial_table_dict, initial_table_title, db_file, dicts_list, dict_linkkey)
-    elif lists_list:
-        createEmbedListTable(initial_table_dict, initial_table_title, db_file, lists_list, dict_linkkey)
-    elif test_bit:
-        updated_dict = addEmbedRow(initial_table_dict, initial_table_title, db_file, data_dict, new_table_title, dict_linkkey, dict_title)
-    else:
-        print("Error. No Embedded item to add.")
-
-    return updated_dict
-
-# Check and add item
-def addItem(initial_table_dict, initial_table_title, db_file, data_dict, new_table_title, dict_linkkey):
-    # If testbit is True, then the item can be added without issue. When either list contains something, the addEmbedItem func is called to go a layer deeper. Then the new item is added with the tables linked.
-    test_bit, dicts_list, lists_list, _ = checkForDicts(data_dict)
-    if test_bit:
-        addRow(new_table_title, db_file, data_dict)
-    elif lists_list or dicts_list:
-        addEmbedItem(initial_table_dict, initial_table_title, db_file, data_dict, new_table_title, dict_linkkey)
-        addItem(initial_table_dict, initial_table_title, db_file, data_dict, new_table_title, dict_linkkey)
-    else:
-        print("Error. No item to add.")
-
-    return
-
-# Create Raw Table. Primary table type should be user, league, player, draft, etc.
-def createRawTable(tables_list, db_file, primary_table_type):
-    for table_dict in tables_list:
-        # Needed for the addItem func. The dict key for the initial table will be xxx_id. This allow the initial table id to be used to link the tables in the new table
-        dict_linkkey = str(primary_table_type) + '_id'
-        raw_table_title = table_dict.get(dict_linkkey)
-        # SQLite3 doesn't seem to like long strings of ints in the tablename. The brackets allow them to be used
-        modified_table_title = str(raw_table_title)
-        addItem(table_dict, modified_table_title, db_file, table_dict, modified_table_title, dict_linkkey)
-
-    return
-
-# Creates the Raw User Info Table
-def createRawUserInfoTable(user_id, db_file, table_title=str(userid)):
-    # The userid is a string of numbers. SQLite3 throws an error if that title isn't in brackets.
-    modified_title = str(table_title)
-    # Calls the Sleeper API to get the user info. Then parses the json response into a dictionary
-    response = reqs.getUserInfo(user_id)
-    user_dict = response.json()
-    # Creates and closes SQLite3 connections in order to make and create a table with all user info from the Sleeper API
-    tableCreate(modified_title, db_file, user_dict)
-    tableInsert(modified_title, db_file, user_dict)
-
-    return
-
-# Create Raw User Leagues Table. primary table = 'user', 'league', 'draft'
-def createRawUserLeaguesTable(user_id, db_file, sport='nfl', season='2023'):
-    # Calls the Sleeper API. Parses the resones and creates the raw league table
-    response = reqs.getUserLeagues(userid, season, sport)
-    tables = response.json()
-    # Need for a use with Sleeper. This is used in the createRawTable function to call addItem func
-    primary_table_type = 'league'
-    createRawTable(tables, dbfile, primary_table_type)
-
-    return
-
-# Create Raw League Users Table. primary table = 'user', 'league', 'draft'
-def createRawLeagueUsersTable(league_id, db_file, sport='nfl', season='2023'):
-    # Calls the Sleeper API. Parses the resones and creates the raw league table
-    response = reqs.getLeagueUsers(league_id, season, sport)
-    tables = response.json()
-    # Need for a use with Sleeper. This is used in the createRawTable function to call addItem func
-    primary_table_type = 'user'
-    createRawTable(tables, db_file, primary_table_type)
-
-    return
-
-createRawUserInfoTable(userid, db_file=dbfile)
-#createRawUserLeaguesTable(userid, season=season, db_file=dbfile)
-createRawUserLeaguesTable(league, season=season, db_file=dbfile)
-
-""" TEST CALLS """
-
-# Responses
-# GET User Leagues is pretty powerful
-#response = reqs.getUserLeagues(userid, season)
-#response2 = reqs.getDraftInfo(draft)
-#response = reqs.getLeagueInfo(league)
-#response2 = reqs.getLeagueInfo(league2)
-#response3 = reqs.getLeagueInfo(league3)
-#response4 = reqs.getUserInfo(userid)
-#response5 = reqs.getUserInfo('richasian')
-#userdata = response4.json()
-#userdict2 = response5.json()
-#print(userdata.keys())
-#print(userdict2.keys())
-#json = response.json()
-#json2 = response2.json()
-#json3 = response3.json()
-
-#json = json.get('roster_positions')
-#json2 = json2.get('roster_positions')
-#json3 = json3.get('roster_positions')
-#print(json3)
-#print(json3)
-#print(set(json.keys()) ^ set(json2.keys()))
-#print(set(json.keys()) ^ set(json3.keys()))
-#print(set(json2.keys()) ^ set(json3.keys()))
-#print(json, json2, json3)
-#print(set(json.keys()) ^ set(json2.keys()) ^ set(json3.keys()))
-#json4 = response4.json()
-
-# Practice Infoset primary
-#tableCreate('tester3', dbfile, userdict)
-#tableInsert('tester3', dbfile, userdict2)
-
-""" Legacy. Keeping for backup for a few more runs """
 """
-# Check that all keys exist in table as columns. Adds them if not
-def checkColumns(table=str, dbfile=str, data=dict):
-    conn = sqlite3.connect(dbfile)
-    cur = conn.cursor()
-    colsstring, valsstring, colslist = getDictStrings(data)
-    print(colsstring)
-    for col in colslist:
-        print(col)
-        #searchquery = "SELECT * AS CNTREC FROM pragma_table_info({0}) WHERE name={1}".format(table, col)
-        searchquery = "SELECT INSTR(sql, {0}) FROM sqlite_master WHERE type='table' AND name={1}".format(col, table)
-        #searchquery = "PRAGMA table_info ({0})".format(table)
-        try:
-            check = cur.execute(searchquery)
-            print(check)
-        except:
-            print('Error')
-        else:
-            print('Success')
-    table = '[' + str(table) + ']'
-    createquery = "CREATE TABLE IF NOT EXISTS {0} ({1})".format(table, colsstring)
-    insertquery = "INSERT INTO {0} ({1}) VALUES ({2})".format(table, str(colsstring), str(valsstring))
-    #cur.execute(createquery)
-    #cur.execute(insertquery, data)
-    #conn.commit()
-    cur.close()
-    conn.close()
+Sleeper stores their players in a database indexed with a number. This is a pretty large file to download (like 12 MB).
+They request that that API endpoint is only called once per day. I call that endpoint manually and store it in a file.
 
-# Create Raw User Leagues Table
-def createRawUserLeaguesTableOld(userid=str, sport='nfl', season='2023', table="", dbfile=str):
-    table = str(userid) + str(sport) + str(season)
-    response = reqs.getUserLeagues(userid, season, sport)
-    leagues = response.json()
+Example commands in a terminal:
+cd ~/path/to/working/directory
+curl "https://api.sleeper.app/v1/players/nfl" -o players.json
+
+This saves that data in a file that I can use at will.
+"""
+with open("players.json") as player_data:
+    PLAYERS = json.load(player_data)
+    player_data.close()
+
+# A global player map is created so that player full names can replace their assigned number as needed
+def buildPlayerMap(players):
+    player_map = {}
+    for player in players:
+        full_name = players[player].get('full_name')
+        if full_name is not None:
+            player_map[player] = full_name
+        else:
+            player_map[player] = "DEF " + str(player)
+    return player_map
+PLAYERS_MAP = buildPlayerMap(PLAYERS)
+
+
+def getUserID(username):
+    id = None
+    try:
+        res = api.getUserInfo(username)
+        id = res.get('user_id')
+    except:
+        print("Failed to get User ID")
+
+    return id
+
+# Prints the last person drafted if a draft is happening
+def getLastDrafted(user_id):
+    drafts = api.getUserDrafts(user_id)
+    for draft in drafts:
+        if draft.get('status') == 'drafting':
+            league_metadata = draft.get('metadata')
+            league_name = league_metadata.get('name')
+            picks = api.getDraftPicks(draft.get('draft_id'))
+            last_pick = picks[-1]
+            last_drafter = last_pick.get('picked_by')
+            pick_num = last_pick.get('pick_no')
+            player_metadata = last_pick.get('metadata')
+            drafter_info = api.getUserInfo(last_drafter)
+            username = drafter_info.get('username')
+
+            player_first_name = player_metadata.get('first_name')
+            player_last_name = player_metadata.get('last_name')
+            player_pos = player_metadata.get('position')
+            print(f"{username} drafted {player_pos} {player_first_name} {player_last_name} with pick number {pick_num} in {league_name}")
+
+    return
+
+# Gets leagues a user is in
+def getLeagues(user_id):
+    leagues = []
+    drafts = api.getUserDrafts(user_id)
+    for draft in drafts:
+        if draft.get('league_id') not in leagues:
+            leagues.append(draft.get('league_id'))
+    return leagues
+
+# Gets users in a league
+def getUsers(leagues):
+    users = []
+    for league_id in leagues:
+        league_users = api.getLeagueUsers(league_id)
+        for league_user in league_users:
+            if league_user.get('user_id') not in users:
+                users.append((league_user.get('user_id'), league_user.get('display_name')))
+    return users
+
+# Gets completed drafts
+def getDrafts(users):
+    drafts = []
+    for user_id, _ in users:
+        user_drafts = api.getUserDrafts(user_id)
+        for user_draft in user_drafts:
+            if user_draft.get('status') == 'complete' and user_draft.get('draft_id') not in drafts:
+                drafts.append(user_draft.get('draft_id'))
+    return drafts
+
+# Prints pretty stuff. Useless function right now
+def getPicks(drafts, user_id):
+    picks = {}
+    print(drafts)
+    for draft in drafts:
+        draft_info = api.getDraftInfo(draft)
+        print(draft_info)
+        #print(api.getDraftPicks(draft))
+
+    return
+
+# Find and sort your most common league mates
+def mostCommonMates(user_id):
+    league_mates = {}
+    leagues = getLeagues(user_id)
     for league in leagues:
-        returnbit, dictlist, listlist, collist = checkForDicts(league)
-        linkkey = 'league_id'
-        leagueid = league.get(linkkey)
-        tablename = '[' + str(leagueid) + ']'
-        for table in dictlist:
-            title = str(table)
-            newdict = league.get(title)
-            testbit, *_ = checkForDicts(newdict)
-            if testbit:
-                addEmbedRow(league, leagueid, dbfile, newdict, title, linkkey)
-        for table in listlist:
-            title = str(table)
-            rosterlist = league.get(title)
-            newdict = buildListDict(rosterlist)
-            testbit, *_ = checkForDicts(newdict)
-            if testbit:
-                addEmbedRow(league, leagueid, dbfile, newdict, title, linkkey)
-        testbit, *_ = checkForDicts(league)
-        if testbit:
-            addRow(tablename, dbfile, league)
-"""
+        league_users = api.getLeagueUsers(league)
+        for league_user in league_users:
+            league_user_id = league_user.get('user_id')
+            league_user_name = league_user.get('display_name')
+            if league_user_id in league_mates:
+                _, count = league_mates.get(league_user_id)
+                league_mates[league_user_id] = (league_user_name, count + 1)
+            else:
+                league_mates[league_user_id] = (league_user_name, 1)
+
+    sorted_dict = dict(reversed(sorted(league_mates.items(), key=lambda item: item[1][1])))
+
+    return sorted_dict
+
+# Get your favorite players.
+# Only returns if the player is owned in more than one league
+def getFavoritePlayers(user_id):
+    favorite_players = {}
+    leagues = getLeagues(user_id)
+    for league in leagues:
+        rosters = api.getLeagueRosters(league)
+        if rosters:
+            for roster in rosters:
+                if user_id != roster.get('owner_id'):
+                    continue
+                players = roster.get('players')
+                if players:
+                    for player in players:
+                        count = favorite_players.get(player, 0)
+                        favorite_players[player] = count + 1
+
+    sorted_dict = dict(reversed(sorted(favorite_players.items(), key=lambda item: item[1])))
+
+    # Own function?
+    favorites = {}
+    for player in sorted_dict:
+        if sorted_dict[player] <= 1:
+            continue
+        player_name = PLAYERS_MAP[player]
+        count = sorted_dict[player]
+        favorites[player_name] = count
+
+    return favorites
+
+def getLeagueMatesFavorites(user_id):
+    all_favorite_players = {}
+    league_mates = mostCommonMates(user_id)
+    for mate in league_mates:
+        username, _ = league_mates[mate]
+        favorite_players = getFavoritePlayers(mate)
+        all_favorite_players[username] = favorite_players
+
+    return all_favorite_players
+
+id = getUserID("ilikeikers")
+favs = getLeagueMatesFavorites(id)
+with open("ikesFavs.txt", "w") as out:
+    for fav in favs:
+        out.write(fav + "\n")
+        out.write(str(favs[fav]) + "\n")
+    out.close()
+
+# TESTS
+#print(mostCommonMates(id))
+#league_mates = mostCommonMates(id)
+#favorite_players = getFavoritePlayers(id)
+#print(favorite_players)
+#getLastDrafted(id)
+#leagues = getLeagues(id)
+#users = getUsers(leagues)
+#drafts = getDrafts(users)
+#picks = getPicks(drafts, id)
