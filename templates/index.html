@@ -1,0 +1,10 @@
+{% extends "layout.html" %}
+{% block body %}
+
+    <h1>GET MOST ROSTERED PLAYERS</h1>
+    <form action="/favorites" method="post">
+        <input autocomplete="off" autofocus name="username" placeholder="Username" required type="text">
+        <button type="submit">Enter</button>
+    </form>
+
+{% endblock %}
